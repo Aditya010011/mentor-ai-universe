@@ -11,14 +11,67 @@ export interface CourseData extends Course {}
 // Export the types for external use
 export type { CourseListItem, Course };
 
-// Fetch all courses
-export const fetchCourses = async (): Promise<CourseListItem[]> => {
+// Pagination response type
+export interface PaginatedCoursesResponse {
+  courses: CourseListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  };
+}
+
+// Fetch all courses (with optional pagination)
+export const fetchCourses = async (page?: number, limit?: number): Promise<CourseListItem[]> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/courses`);
+    // Use ?all=true to get all courses for backward compatibility
+    const url = page
+      ? `${API_BASE_URL}/api/courses?page=${page}&limit=${limit || 12}`
+      : `${API_BASE_URL}/api/courses?all=true`;
+
+    const response = await fetch(url);
     if (!response.ok) {
       throw new Error('Failed to fetch courses');
     }
-    return response.json();
+    const data = await response.json();
+
+    // Handle both old array format and new paginated format
+    if (Array.isArray(data)) {
+      return data;
+    }
+    return data.courses || [];
+  } catch (error) {
+    console.error('Error fetching courses:', error);
+    throw error;
+  }
+};
+
+// Fetch courses with pagination info
+export const fetchCoursesPaginated = async (page: number = 1, limit: number = 12): Promise<PaginatedCoursesResponse> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/courses?page=${page}&limit=${limit}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch courses');
+    }
+    const data = await response.json();
+
+    // Handle response
+    if (Array.isArray(data)) {
+      // Old format - wrap in pagination
+      return {
+        courses: data,
+        pagination: {
+          page: 1,
+          limit: data.length,
+          total: data.length,
+          totalPages: 1,
+          hasMore: false
+        }
+      };
+    }
+    return data;
   } catch (error) {
     console.error('Error fetching courses:', error);
     throw error;

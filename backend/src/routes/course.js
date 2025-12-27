@@ -71,66 +71,97 @@ const getCourseWithHierarchy = async (courseSlug) => {
   }
 };
 
-// Helper function to get counts for a single course
-const getCourseCountsById = async (courseId) => {
+// Helper function to get counts for ALL courses in a single query (optimized)
+const getAllCourseCounts = async (courseIds) => {
   try {
-    // Count modules
-    const { count: modulesCount } = await supabase
+    if (!courseIds || courseIds.length === 0) {
+      return {};
+    }
+
+    // Get all modules with their course_id in one query
+    const { data: modules, error: modulesError } = await supabase
       .from('modules')
-      .select('*', { count: 'exact', head: true })
-      .eq('course_id', courseId)
+      .select('id, course_id')
+      .in('course_id', courseIds)
       .eq('is_published', true);
 
-    // Get module IDs for counting lessons
-    const { data: modules } = await supabase
-      .from('modules')
-      .select('id')
-      .eq('course_id', courseId)
-      .eq('is_published', true);
+    if (modulesError) {
+      console.error('Error fetching modules:', modulesError);
+      return {};
+    }
 
     const moduleIds = modules?.map(m => m.id) || [];
 
-    // Count lessons
-    let lessonsCount = 0;
+    // Get lessons count per module in one query
+    let lessonCounts = {};
     if (moduleIds.length > 0) {
-      const { count } = await supabase
+      const { data: lessons } = await supabase
         .from('lessons')
-        .select('*', { count: 'exact', head: true })
+        .select('module_id')
         .in('module_id', moduleIds)
         .eq('is_published', true);
-      lessonsCount = count || 0;
+
+      lessons?.forEach(l => {
+        lessonCounts[l.module_id] = (lessonCounts[l.module_id] || 0) + 1;
+      });
     }
 
-    // Count exercises
-    let exercisesCount = 0;
+    // Get exercises count per module in one query
+    let exerciseCounts = {};
     if (moduleIds.length > 0) {
-      const { count } = await supabase
+      const { data: exercises } = await supabase
         .from('exercises')
-        .select('*', { count: 'exact', head: true })
+        .select('module_id')
         .in('module_id', moduleIds)
         .eq('is_published', true);
-      exercisesCount = count || 0;
+
+      exercises?.forEach(e => {
+        exerciseCounts[e.module_id] = (exerciseCounts[e.module_id] || 0) + 1;
+      });
     }
 
-    return {
-      modules_count: modulesCount || 0,
-      lessons_count: lessonsCount,
-      exercises_count: exercisesCount
-    };
+    // Aggregate counts per course
+    const courseCounts = {};
+    courseIds.forEach(courseId => {
+      courseCounts[courseId] = {
+        modules_count: 0,
+        lessons_count: 0,
+        exercises_count: 0
+      };
+    });
+
+    modules?.forEach(module => {
+      const courseId = module.course_id;
+      if (courseCounts[courseId]) {
+        courseCounts[courseId].modules_count++;
+        courseCounts[courseId].lessons_count += lessonCounts[module.id] || 0;
+        courseCounts[courseId].exercises_count += exerciseCounts[module.id] || 0;
+      }
+    });
+
+    return courseCounts;
   } catch (error) {
-    console.error(`❌ Error getting counts for course ${courseId}:`, error);
-    return {
-      modules_count: 0,
-      lessons_count: 0,
-      exercises_count: 0
-    };
+    console.error('❌ Error getting all course counts:', error);
+    return {};
   }
 };
 
-// Helper function to get courses with counts
-const getCoursesWithCounts = async () => {
+// Helper function to get courses with counts (optimized with pagination)
+const getCoursesWithCounts = async (page = 1, limit = 12) => {
   try {
-    // Get all published courses (without nested data)
+    const offset = (page - 1) * limit;
+
+    // Get total count first
+    const { count: totalCount, error: countError } = await supabase
+      .from('courses')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_published', true);
+
+    if (countError) {
+      console.error('❌ Error counting courses:', countError);
+    }
+
+    // Get paginated courses (without nested data)
     const { data, error } = await supabase
       .from('courses')
       .select(`
@@ -150,46 +181,58 @@ const getCoursesWithCounts = async () => {
         updated_at
       `)
       .eq('is_published', true)
-      .order('updated_at', { ascending: false });
+      .order('updated_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) {
       console.error('❌ Error fetching courses:', error);
       return null;
     }
 
-    console.log(`📊 Fetched ${data.length} published courses`);
+    console.log(`📊 Fetched ${data.length} courses (page ${page}, limit ${limit})`);
 
-    // Get counts for each course in parallel
-    const coursesWithCounts = await Promise.all(
-      data.map(async (course) => {
-        const counts = await getCourseCountsById(course.id);
+    // Get all course IDs
+    const courseIds = data.map(c => c.id);
 
-        console.log(`📊 Course "${course.title}": ${counts.modules_count} modules, ${counts.lessons_count} lessons, ${counts.exercises_count} exercises`);
+    // Get ALL counts in just 3 queries (instead of 3-4 per course!)
+    const allCounts = await getAllCourseCounts(courseIds);
 
-        return {
-          id: course.id,
-          slug: course.slug,
-          title: course.title,
-          description: course.description,
-          short_description: course.short_description,
-          color: course.color,
-          difficulty_level: course.difficulty_level,
-          estimated_duration_hours: course.estimated_duration_hours,
-          tags: course.tags || [],
-          is_featured: course.is_featured,
-          tutor: {
-            name: course.tutor_name || 'Course Instructor',
-            avatar: course.tutor_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=instructor'
-          },
-          modules_count: counts.modules_count,
-          lessons_count: counts.lessons_count,
-          exercises_count: counts.exercises_count,
-          updated_at: course.updated_at
-        };
-      })
-    );
+    // Map courses with their counts
+    const coursesWithCounts = data.map(course => {
+      const counts = allCounts[course.id] || { modules_count: 0, lessons_count: 0, exercises_count: 0 };
 
-    return coursesWithCounts;
+      return {
+        id: course.id,
+        slug: course.slug,
+        title: course.title,
+        description: course.description,
+        short_description: course.short_description,
+        color: course.color,
+        difficulty_level: course.difficulty_level,
+        estimated_duration_hours: course.estimated_duration_hours,
+        tags: course.tags || [],
+        is_featured: course.is_featured,
+        tutor: {
+          name: course.tutor_name || 'Course Instructor',
+          avatar: course.tutor_avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=instructor'
+        },
+        modules_count: counts.modules_count,
+        lessons_count: counts.lessons_count,
+        exercises_count: counts.exercises_count,
+        updated_at: course.updated_at
+      };
+    });
+
+    return {
+      courses: coursesWithCounts,
+      pagination: {
+        page,
+        limit,
+        total: totalCount || 0,
+        totalPages: Math.ceil((totalCount || 0) / limit),
+        hasMore: offset + data.length < (totalCount || 0)
+      }
+    };
   } catch (error) {
     console.error('❌ Exception fetching courses with counts:', error);
     return null;
@@ -503,9 +546,40 @@ router.get('/db-status', async (req, res) => {
   }
 });
 
-// GET all courses (updated for new structure)
+// GET all courses (optimized with pagination)
 router.get('/', async (req, res) => {
   try {
+    // Parse pagination params
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 12;
+    const all = req.query.all === 'true'; // Get all courses without pagination
+
+    // Check Supabase connection
+    const isConnected = await checkSupabaseConnection();
+
+    if (isConnected) {
+      // Use optimized paginated query
+      if (all) {
+        // For backward compatibility - get all courses (but still optimized)
+        const result = await getCoursesWithCounts(1, 1000);
+        if (result && result.courses) {
+          res.json(result.courses);
+          return;
+        }
+      } else {
+        const result = await getCoursesWithCounts(page, limit);
+        if (result) {
+          // Return with pagination metadata
+          res.json({
+            courses: result.courses,
+            pagination: result.pagination
+          });
+          return;
+        }
+      }
+    }
+
+    // Fallback to old method
     const courses = await readCourses();
 
     // Return course list with proper structure
