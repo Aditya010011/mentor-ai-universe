@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { isAdmin } from '@/lib/adminAuth';
-import { fetchCourses } from '@/services/apiService';
+import { fetchCoursesForAdmin } from '@/services/apiService';
 import {
   BookOpen,
   Users,
@@ -50,10 +50,10 @@ export default function AdminDashboard() {
     checkAdmin();
   }, [user, navigate, toast]);
 
-  // Fetch courses data for statistics
+  // Fetch courses data for statistics (including unpublished)
   const { data: courses = [], isLoading } = useQuery({
-    queryKey: ['courses'],
-    queryFn: fetchCourses
+    queryKey: ['admin-courses'],
+    queryFn: fetchCoursesForAdmin
   });
 
   // Calculate statistics

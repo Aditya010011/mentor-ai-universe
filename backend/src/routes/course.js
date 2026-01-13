@@ -147,22 +147,27 @@ const getAllCourseCounts = async (courseIds) => {
 };
 
 // Helper function to get courses with counts (optimized with pagination)
-const getCoursesWithCounts = async (page = 1, limit = 12) => {
+const getCoursesWithCounts = async (page = 1, limit = 12, includeUnpublished = false) => {
   try {
     const offset = (page - 1) * limit;
 
-    // Get total count first
-    const { count: totalCount, error: countError } = await supabase
+    // Build count query
+    let countQuery = supabase
       .from('courses')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_published', true);
+      .select('*', { count: 'exact', head: true });
+
+    if (!includeUnpublished) {
+      countQuery = countQuery.eq('is_published', true);
+    }
+
+    const { count: totalCount, error: countError } = await countQuery;
 
     if (countError) {
       console.error('❌ Error counting courses:', countError);
     }
 
-    // Get paginated courses (without nested data)
-    const { data, error } = await supabase
+    // Build courses query
+    let coursesQuery = supabase
       .from('courses')
       .select(`
         id,
@@ -180,9 +185,14 @@ const getCoursesWithCounts = async (page = 1, limit = 12) => {
         tutor_avatar,
         updated_at
       `)
-      .eq('is_published', true)
       .order('updated_at', { ascending: false })
       .range(offset, offset + limit - 1);
+
+    if (!includeUnpublished) {
+      coursesQuery = coursesQuery.eq('is_published', true);
+    }
+
+    const { data, error } = await coursesQuery;
 
     if (error) {
       console.error('❌ Error fetching courses:', error);
@@ -553,6 +563,7 @@ router.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 12;
     const all = req.query.all === 'true'; // Get all courses without pagination
+    const includeUnpublished = req.query.admin === 'true'; // Include unpublished for admin
 
     // Check Supabase connection
     const isConnected = await checkSupabaseConnection();
@@ -561,13 +572,13 @@ router.get('/', async (req, res) => {
       // Use optimized paginated query
       if (all) {
         // For backward compatibility - get all courses (but still optimized)
-        const result = await getCoursesWithCounts(1, 1000);
+        const result = await getCoursesWithCounts(1, 1000, includeUnpublished);
         if (result && result.courses) {
           res.json(result.courses);
           return;
         }
       } else {
-        const result = await getCoursesWithCounts(page, limit);
+        const result = await getCoursesWithCounts(page, limit, includeUnpublished);
         if (result) {
           // Return with pagination metadata
           res.json({

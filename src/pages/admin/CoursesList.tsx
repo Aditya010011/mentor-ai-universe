@@ -23,7 +23,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { fetchCourses, deleteCourse } from '@/services/apiService';
+import { fetchCoursesForAdmin, deleteCourse } from '@/services/apiService';
 import { AICourseGeneratorModal } from '@/components/admin/AICourseGeneratorModal';
 import { Sparkles } from 'lucide-react';
 
@@ -60,10 +60,10 @@ export default function CoursesList() {
     checkAdmin();
   }, [user, navigate, toast]);
 
-  // Fetch courses data
+  // Fetch courses data (including unpublished for admin)
   const { data: courses = [], isLoading, error, refetch } = useQuery({
-    queryKey: ['courses'],
-    queryFn: fetchCourses
+    queryKey: ['admin-courses'],
+    queryFn: fetchCoursesForAdmin
   });
 
   // Filter courses based on search term

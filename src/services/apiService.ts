@@ -24,13 +24,23 @@ export interface PaginatedCoursesResponse {
 }
 
 // Fetch all courses (with optional pagination)
-export const fetchCourses = async (page?: number, limit?: number): Promise<CourseListItem[]> => {
+export const fetchCourses = async (page?: number, limit?: number, includeUnpublished?: boolean): Promise<CourseListItem[]> => {
   try {
-    // Use ?all=true to get all courses for backward compatibility
-    const url = page
-      ? `${API_BASE_URL}/api/courses?page=${page}&limit=${limit || 12}`
-      : `${API_BASE_URL}/api/courses?all=true`;
+    // Build URL with params
+    const params = new URLSearchParams();
 
+    if (page) {
+      params.set('page', page.toString());
+      params.set('limit', (limit || 12).toString());
+    } else {
+      params.set('all', 'true');
+    }
+
+    if (includeUnpublished) {
+      params.set('admin', 'true');
+    }
+
+    const url = `${API_BASE_URL}/api/courses?${params.toString()}`;
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error('Failed to fetch courses');
@@ -46,6 +56,11 @@ export const fetchCourses = async (page?: number, limit?: number): Promise<Cours
     console.error('Error fetching courses:', error);
     throw error;
   }
+};
+
+// Fetch all courses for admin (includes unpublished)
+export const fetchCoursesForAdmin = async (): Promise<CourseListItem[]> => {
+  return fetchCourses(undefined, undefined, true);
 };
 
 // Fetch courses with pagination info
