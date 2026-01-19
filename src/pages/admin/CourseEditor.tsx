@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { fetchCourse, createCourse, updateCourse, CourseData } from '@/services/apiService';
+import { fetchCourse, createCourse, updateCourse, CourseData, addModule as addModuleAPI } from '@/services/apiService';
 
 interface Module {
   id: string;
@@ -179,28 +179,44 @@ export default function CourseEditor() {
   };
 
   // Add a new module
-  const addNewModule = () => {
-    if (courseData) {
-      const newModuleId = `module${courseData.modules.length + 1}`;
-      const newModule: Module = {
-        id: newModuleId,
-        title: 'New Module',
-        description: 'Module description goes here',
-        lessons: [],
-        exercises: [],
-        resources: []
-      };
+  const addNewModule = async () => {
+    if (courseData && slug) {
+      try {
+        // Call API to create module in database
+        const savedModule = await addModuleAPI(slug, {
+          title: 'New Module',
+          description: 'Module description goes here',
+          order_index: courseData.modules.length
+        });
 
-      setCourseData({
-        ...courseData,
-        modules: [...courseData.modules, newModule]
-      });
+        // Use the actual ID from the database
+        const newModule: Module = {
+          id: savedModule.id,
+          title: savedModule.title,
+          description: savedModule.description || '',
+          lessons: [],
+          exercises: [],
+          resources: []
+        };
 
-      setActiveModule(newModuleId);
-      toast({
-        title: "Module added",
-        description: "New module has been added to the course.",
-      });
+        setCourseData({
+          ...courseData,
+          modules: [...courseData.modules, newModule]
+        });
+
+        setActiveModule(savedModule.id);
+        toast({
+          title: "Module added",
+          description: "New module has been saved to the database.",
+        });
+      } catch (error) {
+        console.error('Error adding module:', error);
+        toast({
+          title: "Error",
+          description: "Failed to add module. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
