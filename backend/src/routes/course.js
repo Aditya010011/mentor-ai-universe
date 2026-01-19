@@ -1155,10 +1155,46 @@ router.post('/:slug/modules/:moduleId/lessons', async (req, res) => {
     const isConnected = await checkSupabaseConnection();
 
     if (isConnected) {
+      // First, get the actual module ID (moduleId could be a slug or UUID)
+      let actualModuleId = moduleId;
+
+      // Check if moduleId is a UUID or a slug
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(moduleId);
+
+      if (!isUUID) {
+        // It's a slug, need to look up the actual module
+        // First get the course
+        const { data: course, error: courseError } = await supabase
+          .from('courses')
+          .select('id')
+          .eq('slug', slug)
+          .single();
+
+        if (courseError || !course) {
+          console.error('Course not found:', courseError);
+          return res.status(404).json({ error: 'Course not found' });
+        }
+
+        // Then get the module by slug within this course
+        const { data: module, error: moduleError } = await supabase
+          .from('modules')
+          .select('id')
+          .eq('course_id', course.id)
+          .eq('slug', moduleId)
+          .single();
+
+        if (moduleError || !module) {
+          console.error('Module not found:', moduleError);
+          return res.status(404).json({ error: 'Module not found' });
+        }
+
+        actualModuleId = module.id;
+      }
+
       const { data, error } = await supabase
         .from('lessons')
         .insert({
-          module_id: moduleId,
+          module_id: actualModuleId,
           title: newLesson.title,
           content: newLesson.content || '',
           description: newLesson.description || '',
@@ -1225,6 +1261,58 @@ router.put('/:slug/modules/:moduleId/lessons/:lessonId', async (req, res) => {
     const isConnected = await checkSupabaseConnection();
 
     if (isConnected) {
+      // Check if lessonId is a UUID or a slug
+      let actualLessonId = lessonId;
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(lessonId);
+
+      if (!isUUID) {
+        // Need to look up the lesson by slug
+        // First get the module
+        let actualModuleId = moduleId;
+        const isModuleUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(moduleId);
+
+        if (!isModuleUUID) {
+          // Get course first
+          const { data: course, error: courseError } = await supabase
+            .from('courses')
+            .select('id')
+            .eq('slug', slug)
+            .single();
+
+          if (courseError || !course) {
+            return res.status(404).json({ error: 'Course not found' });
+          }
+
+          // Get module by slug
+          const { data: module, error: moduleError } = await supabase
+            .from('modules')
+            .select('id')
+            .eq('course_id', course.id)
+            .eq('slug', moduleId)
+            .single();
+
+          if (moduleError || !module) {
+            return res.status(404).json({ error: 'Module not found' });
+          }
+
+          actualModuleId = module.id;
+        }
+
+        // Get lesson by slug within this module
+        const { data: lesson, error: lessonError } = await supabase
+          .from('lessons')
+          .select('id')
+          .eq('module_id', actualModuleId)
+          .eq('slug', lessonId)
+          .single();
+
+        if (lessonError || !lesson) {
+          return res.status(404).json({ error: 'Lesson not found' });
+        }
+
+        actualLessonId = lesson.id;
+      }
+
       const { data, error } = await supabase
         .from('lessons')
         .update({
@@ -1236,7 +1324,7 @@ router.put('/:slug/modules/:moduleId/lessons/:lessonId', async (req, res) => {
           estimated_duration_minutes: updatedLesson.duration || updatedLesson.estimated_duration_minutes || updatedLesson.duration_minutes,
           video_url: updatedLesson.videoUrl || updatedLesson.video_url
         })
-        .eq('id', lessonId)
+        .eq('id', actualLessonId)
         .select()
         .single();
 
