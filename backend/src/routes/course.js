@@ -1175,16 +1175,42 @@ router.post('/:slug/modules/:moduleId/lessons', async (req, res) => {
           return res.status(404).json({ error: 'Course not found' });
         }
 
-        // Then get the module by slug within this course
-        const { data: module, error: moduleError } = await supabase
+        // Try to get the module by slug within this course
+        let { data: module, error: moduleError } = await supabase
           .from('modules')
-          .select('id')
+          .select('id, slug')
           .eq('course_id', course.id)
           .eq('slug', moduleId)
           .single();
 
+        // If not found by exact slug, try matching by order_index (e.g., module5 -> order_index 4)
         if (moduleError || !module) {
-          console.error('Module not found:', moduleError);
+          // Check if moduleId is like "module5" or "module-5"
+          const moduleMatch = moduleId.match(/module[-_]?(\d+)/i);
+          if (moduleMatch) {
+            const orderIndex = parseInt(moduleMatch[1]) - 1; // module5 = order_index 4
+            const { data: moduleByOrder, error: orderError } = await supabase
+              .from('modules')
+              .select('id, slug')
+              .eq('course_id', course.id)
+              .eq('order_index', orderIndex)
+              .single();
+
+            if (!orderError && moduleByOrder) {
+              module = moduleByOrder;
+              console.log(`Found module by order_index ${orderIndex}:`, moduleByOrder.slug);
+            }
+          }
+        }
+
+        if (!module) {
+          console.error('Module not found. Searched for slug:', moduleId);
+          // Log available modules for debugging
+          const { data: allModules } = await supabase
+            .from('modules')
+            .select('id, slug, order_index')
+            .eq('course_id', course.id);
+          console.log('Available modules:', allModules);
           return res.status(404).json({ error: 'Module not found' });
         }
 
