@@ -1009,9 +1009,10 @@ router.post('/:slug/modules', async (req, res) => {
 
       if (error) {
         console.error('Error creating module:', error);
-        return res.status(500).json({ error: 'Failed to create module' });
+        return res.status(500).json({ error: 'Failed to create module', details: error.message });
       }
 
+      console.log('✅ Module created:', data.id, data.title);
       return res.status(201).json(data);
     }
 
@@ -1235,9 +1236,11 @@ router.post('/:slug/modules/:moduleId/lessons', async (req, res) => {
 
       if (error) {
         console.error('Error creating lesson:', error);
-        return res.status(500).json({ error: 'Failed to create lesson' });
+        console.error('Lesson data attempted:', { module_id: actualModuleId, title: newLesson.title });
+        return res.status(500).json({ error: 'Failed to create lesson', details: error.message });
       }
 
+      console.log('✅ Lesson created:', data.id, data.title, 'in module:', actualModuleId);
       return res.status(201).json(data);
     }
 
