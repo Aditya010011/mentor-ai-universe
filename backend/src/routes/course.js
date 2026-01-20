@@ -1222,6 +1222,10 @@ router.post('/:slug/modules/:moduleId/lessons', async (req, res) => {
         actualModuleId = module.id;
       }
 
+      // Generate unique slug with timestamp to avoid duplicates
+      const baseSlug = newLesson.slug || newLesson.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
+
       const { data, error } = await supabase
         .from('lessons')
         .insert({
@@ -1229,7 +1233,7 @@ router.post('/:slug/modules/:moduleId/lessons', async (req, res) => {
           title: newLesson.title,
           content: newLesson.content || '',
           description: newLesson.description || '',
-          slug: newLesson.slug || newLesson.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          slug: uniqueSlug,
           order_index: newLesson.order_index || 0,
           estimated_duration_minutes: newLesson.duration || newLesson.estimated_duration_minutes || newLesson.duration_minutes || 15,
           video_url: newLesson.videoUrl || newLesson.video_url,
