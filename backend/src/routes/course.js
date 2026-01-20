@@ -992,6 +992,10 @@ router.post('/:slug/modules', async (req, res) => {
         return res.status(404).json({ error: 'Course not found' });
       }
 
+      // Generate unique slug with timestamp to avoid duplicates
+      const baseSlug = newModule.slug || newModule.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;
+
       // Insert the new module
       const { data, error } = await supabase
         .from('modules')
@@ -999,7 +1003,7 @@ router.post('/:slug/modules', async (req, res) => {
           course_id: course.id,
           title: newModule.title,
           description: newModule.description,
-          slug: newModule.slug || newModule.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          slug: uniqueSlug,
           order_index: newModule.order_index || 0,
           estimated_duration_minutes: newModule.estimated_duration_minutes || 0,
           is_published: true
