@@ -14,7 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { isAdmin } from '@/lib/adminAuth';
 import { LessonEditorModal } from '@/components/admin/LessonEditorModal';
 import { Edit } from 'lucide-react';
-import { updateLesson as updateLessonAPI, createLesson as createLessonAPI } from '@/services/apiService';
+import { updateLesson as updateLessonAPI, createLesson as createLessonAPI, deleteModule as deleteModuleAPI, deleteLesson as deleteLessonAPI } from '@/services/apiService';
 
 import {
   Table,
@@ -221,22 +221,34 @@ export default function CourseEditor() {
   };
 
   // Delete a module
-  const deleteModule = (moduleId: string) => {
-    if (courseData && window.confirm("Are you sure you want to delete this module?")) {
-      const updatedModules = courseData.modules.filter(module => module.id !== moduleId);
-      setCourseData({
-        ...courseData,
-        modules: updatedModules
-      });
+  const deleteModule = async (moduleId: string) => {
+    if (courseData && slug && window.confirm("Are you sure you want to delete this module?")) {
+      try {
+        // Call API to delete from database
+        await deleteModuleAPI(slug, moduleId);
 
-      if (activeModule === moduleId && updatedModules.length > 0) {
-        setActiveModule(updatedModules[0].id);
+        const updatedModules = courseData.modules.filter(module => module.id !== moduleId);
+        setCourseData({
+          ...courseData,
+          modules: updatedModules
+        });
+
+        if (activeModule === moduleId && updatedModules.length > 0) {
+          setActiveModule(updatedModules[0].id);
+        }
+
+        toast({
+          title: "Module deleted",
+          description: "The module has been removed from the course.",
+        });
+      } catch (error) {
+        console.error('Error deleting module:', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete module. Please try again.",
+          variant: "destructive",
+        });
       }
-
-      toast({
-        title: "Module deleted",
-        description: "The module has been removed from the course.",
-      });
     }
   };
 
@@ -344,27 +356,39 @@ export default function CourseEditor() {
   };
 
   // Delete lesson
-  const deleteLesson = (moduleId: string, lessonId: string) => {
-    if (courseData && window.confirm("Are you sure you want to delete this lesson?")) {
-      const updatedModules = courseData.modules.map(module => {
-        if (module.id === moduleId) {
-          return {
-            ...module,
-            lessons: module.lessons.filter(lesson => lesson.id !== lessonId)
-          };
-        }
-        return module;
-      });
+  const deleteLesson = async (moduleId: string, lessonId: string) => {
+    if (courseData && slug && window.confirm("Are you sure you want to delete this lesson?")) {
+      try {
+        // Call API to delete from database
+        await deleteLessonAPI(slug, moduleId, lessonId);
 
-      setCourseData({
-        ...courseData,
-        modules: updatedModules
-      });
+        const updatedModules = courseData.modules.map(module => {
+          if (module.id === moduleId) {
+            return {
+              ...module,
+              lessons: module.lessons.filter(lesson => lesson.id !== lessonId)
+            };
+          }
+          return module;
+        });
 
-      toast({
-        title: "Lesson deleted",
-        description: "The lesson has been removed from the module.",
-      });
+        setCourseData({
+          ...courseData,
+          modules: updatedModules
+        });
+
+        toast({
+          title: "Lesson deleted",
+          description: "The lesson has been removed from the module.",
+        });
+      } catch (error) {
+        console.error('Error deleting lesson:', error);
+        toast({
+          title: "Error",
+          description: "Failed to delete lesson. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
