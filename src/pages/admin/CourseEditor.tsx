@@ -24,7 +24,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
-import { fetchCourse, createCourse, updateCourse, CourseData, addModule as addModuleAPI } from '@/services/apiService';
+import { fetchCourse, createCourse, updateCourse, CourseData, addModule as addModuleAPI, updateModule as updateModuleAPI } from '@/services/apiService';
 
 interface Module {
   id: string;
@@ -162,8 +162,9 @@ export default function CourseEditor() {
   };
 
   // Handle module updates
-  const updateModule = (moduleId: string, field: string, value: string) => {
-    if (courseData) {
+  const updateModule = async (moduleId: string, field: string, value: string) => {
+    if (courseData && slug) {
+      // Update local state immediately for responsive UI
       const updatedModules = courseData.modules.map(module => {
         if (module.id === moduleId) {
           return { ...module, [field]: value };
@@ -175,6 +176,24 @@ export default function CourseEditor() {
         ...courseData,
         modules: updatedModules
       });
+
+      // Save to database
+      try {
+        const module = courseData.modules.find(m => m.id === moduleId);
+        if (module) {
+          await updateModuleAPI(slug, moduleId, {
+            ...module,
+            [field]: value
+          });
+        }
+      } catch (error) {
+        console.error('Error updating module:', error);
+        toast({
+          title: "Error",
+          description: "Failed to save module changes.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
